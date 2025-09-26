@@ -10,3 +10,4 @@ Relevant base packages:
 
 [NetworkDynamics](https://juliadynamics.github.io/NetworkDynamics.jl/stable/)
 
+The file /scripts/generate_dataset.jl contains an example for generating a dataset of short circuit simulations using this package. 
