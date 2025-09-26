@@ -1,0 +1,28 @@
+name = "IEEE39"
+uuid = "0bc2bb3a-3d46-4385-8133-edeb469ca480"
+authors = ["Frank Hellmann <hellmann@pik-potsdam.com>"]
+version = "0.1.0"
+
+[deps]
+CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+DiffEqCallbacks = "459566f4-90b8-5000-8ac3-15dfb0a30def"
+Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
+NetworkDynamics = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
+PowerDynamics = "cc46b21f-1b17-51c2-b642-af74c3d3a8be"
+PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
+Random = "9a3f8284-a2c9-5f02-9a11-845980a1fd5c"
+SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
+
+[compat]
+CSV = "=0.10.15"
+DataFrames = "=1.8.0"
+DiffEqCallbacks = "=4.9.0"
+Graphs = "=1.13.1"
+ModelingToolkit = "=10.22.0"
+NetworkDynamics = "=0.10.8"
+PowerDynamics = "=4.2.0"
+PrecompileTools = "=1.2.1"
+Random = "=1.11.0"
+SciMLBase = "=2.120.0"
