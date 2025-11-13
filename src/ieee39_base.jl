@@ -20,7 +20,27 @@ function apply_csv_params!(bus, table, bus_index)
     end
 end
 
-function get_IEEE39_base()
+function add_killswitch_to_vm(vm)
+    function newf(du, u, ein, p, t)
+        killswitch = p[end]
+        if !iszero(killswitch)
+            du .= 0
+        else
+            vm.f(du, u, ein, p, t)
+        end
+        nothing
+    end
+
+    newp = vcat(psym(vm), :killswitch)
+
+    vm_kill = VertexModel(vm, f=newf, psym=newp)
+    set_default!(vm_kill, :killswitch, 0.)
+
+    vm_kill
+end
+
+
+function get_IEEE39_base(; add_killswitch=false)
 
 
     branch_df = CSV.read(joinpath(DATA_DIR, "branch.csv"), DataFrame)
@@ -136,6 +156,10 @@ function get_IEEE39_base()
         end
 
         push!(branches, line)
+    end
+
+    if add_killswitch
+        busses = add_killswitch_to_vm.(busses)
     end
 
     Network(busses, branches)

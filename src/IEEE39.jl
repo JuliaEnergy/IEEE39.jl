@@ -19,7 +19,7 @@ include("ieee39_random_pf.jl")
 export generate_powerflow_variation
 
 include("utilities.jl")
-export sc_and_trip
+export sc_and_trip, sc_and_trip_and_kill
 
 function pre()
     nw_base = get_IEEE39_base()
