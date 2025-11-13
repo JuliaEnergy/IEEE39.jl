@@ -21,12 +21,15 @@ function apply_csv_params!(bus, table, bus_index)
 end
 
 function add_killswitch_to_vm(vm)
-    function newf(du, u, ein, p, t)
+    
+    vmf = vm.f
+
+    newf = (du, u, ein, p, t) -> begin
         killswitch = p[end]
         if !iszero(killswitch)
             du .= 0
         else
-            vm.f(du, u, ein, p, t)
+            vmf(du, u, ein, p, t)
         end
         nothing
     end
