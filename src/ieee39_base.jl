@@ -5,6 +5,7 @@ using ModelingToolkit
 using NetworkDynamics
 using DataFrames
 using CSV
+using LinearAlgebra: diag, isdiag
 
 DATA_DIR = joinpath(pkgdir(@__MODULE__), "ieee39data")
 
@@ -20,28 +21,33 @@ function apply_csv_params!(bus, table, bus_index)
     end
 end
 
-function add_killswitch_to_vm(vm)
-    
-    vmf = vm.f
+struct KillswitchWrapper{F}
+    f::F
+    odes::Vector{Int}
+end
 
-    newf = (du, u, ein, p, t) -> begin
-        killswitch = p[end]
-        if !iszero(killswitch)
-            du .= 0
-        else
-            vmf(du, u, ein, p, t)
+function (kw::KillswitchWrapper{F})(du, u, ein, p, t) where {F}
+    kw.f(du, u, ein, p, t)
+    killswitch = p[end]
+    if !iszero(killswitch)
+        for i in kw.odes
+            du[i] = 0
         end
-        nothing
     end
+    nothing
+end
 
+function add_killswitch_to_vm(vm)
+    @assert isdiag(vm.mass_matrix)
+    odes = findall(!iszero, diag(vm.mass_matrix))
+    kwf = KillswitchWrapper(vm.f, odes)
     newp = vcat(psym(vm), :killswitch)
 
-    vm_kill = VertexModel(vm, f=newf, psym=newp)
-    set_default!(vm_kill, :killswitch, 0.)
+    vm_kill = VertexModel(vm, f=kwf, psym=newp)
+    set_default!(vm_kill, :killswitch, 0)
 
     vm_kill
 end
-
 
 function get_IEEE39_base(; add_killswitch=false)
 

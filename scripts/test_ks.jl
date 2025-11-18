@@ -20,7 +20,7 @@ Logging.disable_logging(Logging.Warn)
 ##
 
 function simulate_sc_and_kill(nw, nws; t_sc_to_trip, sc_bus, pos, kill_list, solver=Rodas4(), tol=1e-3, maxiters=10000, abstol=tol, reltol=tol, dtmin = 1e-4, force_dtmin = true)
-    prob = ODEProblem(nw, copy(uflat(nws)), (0.0, 5.0), copy(pflat(nws)); callback=sc_and_trip_and_kill(sc_bus, 0.1, 0.1 + t_sc_to_trip, pos, kill_list))
+    prob = ODEProblem(nw, nws, (0.0, 5.0); add_nw_cb=sc_and_trip_and_kill(sc_bus, 0.1, 0.1 + t_sc_to_trip, pos, kill_list))
     solve(prob, solver; saveat=0.:0.01:5.0, maxiters, abstol, reltol, dtmin, force_dtmin)
 end
 
