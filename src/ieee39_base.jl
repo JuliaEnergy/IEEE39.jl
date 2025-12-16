@@ -49,6 +49,16 @@ function add_killswitch_to_vm(vm)
     vm_kill
 end
 
+function get_MATPOWER_LineRatings_MVA()
+    mp_branch_df = CSV.read(joinpath(DATA_DIR, "mp_branch.csv"), DataFrame)
+    mp_branch_df.rateA
+end
+
+function get_MATPOWER_LineRatings_pu(BASE_MVA = 100.0)
+    mp_branch_df = CSV.read(joinpath(DATA_DIR, "mp_branch.csv"), DataFrame)
+    mp_branch_df.rateA ./ BASE_MVA
+end
+
 function get_IEEE39_base(; add_killswitch=false)
 
 

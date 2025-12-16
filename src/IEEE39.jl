@@ -13,7 +13,7 @@ using PrecompileTools
 using SciMLBase
 
 include("ieee39_base.jl")
-export get_IEEE39_base, set_IEEE39_PF_init
+export get_IEEE39_base, set_IEEE39_PF_init, get_MATPOWER_LineRatings_MVA, get_MATPOWER_LineRatings_pu
 
 include("ieee39_random_pf.jl")
 export generate_powerflow_variation
