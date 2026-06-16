@@ -93,8 +93,9 @@ function gen_NNF_and_run_short_circuits(nw, pfnw, pfs0; debug=false, verbose=fal
     sc_buses = setdiff(edges, e_fail)
     
     nws_varied, pfs_varied, (;P_31, Q_31, P_39, Q_39) = try
-        generate_powerflow_variation(nw, pfnw, pfs)
+        # generate_powerflow_variation(nw, pfnw, pfs)
         # generate_powerflow_variation_RES(nw, pfnw, pfs)
+        generate_powerflow_variation_loads(nw, pfnw, pfs)
     catch e
         verbose && println(e)
         return nothing
