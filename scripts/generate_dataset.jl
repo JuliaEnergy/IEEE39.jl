@@ -30,7 +30,8 @@ using Tables
 using Arrow
 using SparseConnectivityTracer
 using Logging
-Logging.disable_logging(Logging.Warn)
+using ModelingToolkit
+# Logging.disable_logging(Logging.Warn)
 
 ##
 
@@ -93,9 +94,48 @@ function gen_NNF_and_run_short_circuits(nw, pfnw, pfs0; debug=false, verbose=fal
     sc_buses = setdiff(edges, e_fail)
     
     nws_varied, pfs_varied, (;P_31, Q_31, P_39, Q_39) = try
-        # generate_powerflow_variation(nw, pfnw, pfs)
-        # generate_powerflow_variation_RES(nw, pfnw, pfs)
-        generate_powerflow_variation_loads(nw, pfnw, pfs)
+        generate_powerflow_variation(nw, pfnw, pfs)
+    catch e
+        verbose && println(e)
+        return nothing
+    end
+
+    trip_times = 0.05:0.05:0.2
+    sc_positions = [0.1, 0.9]
+
+    # For convenience we package all possible combinations of trip_times, positions and sc_bus into an array of named tuples.
+    experiments = [(; t_sc_to_trip, sc_bus, pos) for (t_sc_to_trip, sc_bus, pos) in Base.Iterators.product(trip_times, sc_buses, sc_positions)]
+
+    res = []
+
+    if debug
+        experiments = sample(experiments, 10, replace=false)
+    end 
+
+    for exp_paras in experiments
+        verbose && println(exp_paras)
+        sol = simulate_sc(nw, nws_varied; exp_paras...)
+        push!(res, (; exp_paras... , analyze_sol(nw, nws_varied, sol)...))
+    end
+
+    sim_results = columntable(res)
+    pg_state = (; e_fail, P_31, Q_31, P_39, Q_39, u_pf = uflat(pfs_varied), p_pf = pflat(pfs_varied), u_nw = uflat(nws_varied), p_nw = pflat(nws_varied))    
+    
+    return (; sim_results..., pg_state...)
+end
+
+
+
+function vary_load_and_run_short_circuits(nw, pfnw, pfs0; debug=false, verbose=false)
+
+    pfs = deepcopy(pfs0)
+
+    edges = collect(1:46)
+    e_fail = Int[]
+    sc_buses = setdiff(edges, e_fail)
+    
+    nws_varied, pfs_varied, (;P_31, Q_31, P_39, Q_39) = try
+    generate_powerflow_variation_loads(nw, pfnw, pfs)
     catch e
         verbose && println(e)
         return nothing
@@ -127,12 +167,12 @@ end
 
 ##
 
-function generate_dataset(N, filename, nw, pfnw, pfs0; debug=false, verbose=false)
+function generate_dataset(N, filename, nw, pfnw, pfs0; debug=false, verbose=false, dist_slack=false)
 
     verbose && println("Running simulation 1/$N")
     data = nothing
     while isnothing(data)
-        data = gen_NNF_and_run_short_circuits(nw, pfnw, pfs0; verbose, debug)
+        data = (dist_slack ? vary_load_and_run_short_circuits(nw, pfnw, pfs0; verbose, debug) : gen_NNF_and_run_short_circuits(nw, pfnw, pfs0; verbose, debug))
         verbose && println("No data generated")
     end
 
@@ -142,7 +182,7 @@ function generate_dataset(N, filename, nw, pfnw, pfs0; debug=false, verbose=fals
         verbose && println("Running simulation $i/$N")
         data = nothing
         while isnothing(data)
-            data = gen_NNF_and_run_short_circuits(nw, pfnw, pfs0; verbose, debug)
+            data = (dist_slack ? vary_load_and_run_short_circuits(nw, pfnw, pfs0; verbose, debug) : gen_NNF_and_run_short_circuits(nw, pfnw, pfs0; verbose, debug))
             verbose && println("No data generated")
         end
 
@@ -155,9 +195,14 @@ end
 
 
 
-
 ##
-nw_base = get_IEEE39_base()
+# dist_slack_and_varload: This parameter decides whether to go the way implemented by Frank Hellmann (Vary P and Q randomly, trip lines
+# and generate short circuits) or the way implemented to read in load demand data from Tricarico et al. (2023), to use distributed 
+# slack buses and to just generate short circuits
+dist_slack_and_varload = true
+
+nw_base = (dist_slack_and_varload ? get_IEEE39_base_ds() : get_IEEE39_base())
+
 nw_39 = set_IEEE39_PF_init(nw_base)
 pfnw_39 = powerflow_model(nw_39)
 pfs0_39 = NWState(pfnw_39)
@@ -170,12 +215,11 @@ data_file = joinpath(@__DIR__, "debug.arrow")
 Random.seed!(42)
 
 t_start = time()
-wd = generate_dataset(10, data_file, nw_39, pfnw_39, pfs0_39; verbose=true, debug=true)
+wd = generate_dataset(10, data_file, nw_39, pfnw_39, pfs0_39; verbose=true, debug=true, dist_slack=dist_slack_and_varload)
 t_end = time()
 println(t_end - t_start)
 
 ##
-
 data = Arrow.Table(data_file)
 
 ##

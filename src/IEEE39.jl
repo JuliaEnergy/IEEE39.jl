@@ -11,6 +11,7 @@ using CSV
 using DiffEqCallbacks
 using PrecompileTools
 using SciMLBase
+using Dates
 
 include("ieee39_base.jl")
 export get_IEEE39_base, set_IEEE39_PF_init, get_MATPOWER_LineRatings_MVA, get_MATPOWER_LineRatings_pu
@@ -20,6 +21,14 @@ export generate_powerflow_variation
 
 include("utilities.jl")
 export sc_and_trip, sc_and_trip_and_kill
+
+include("ieee39_base_ds.jl")
+export get_IEEE39_base_ds
+
+include("ieee39_res_pf.jl")
+export generate_powerflow_variation_loads, generate_powerflow_variation_RES
+# include("ds.jl")
+# export DistributedSlackFollow, DistributedSlackLead
 
 function pre()
     nw_base = get_IEEE39_base()

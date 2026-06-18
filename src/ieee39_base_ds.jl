@@ -7,63 +7,11 @@ using DataFrames
 using CSV
 using LinearAlgebra: diag, isdiag
 
+@independent_variables t
+
 DATA_DIR = joinpath(pkgdir(@__MODULE__), "ieee39data")
 
-function apply_csv_params!(bus, table, bus_index)
-    row_idx = findfirst(table.bus .== bus_index)
-
-    ## Apply all parameters except "bus" column
-    row = table[row_idx, :]
-    for col_name in names(table)
-        if col_name != "bus"
-            set_default!(bus, Regex(col_name*"\$"), row[col_name])
-        end
-    end
-end
-
-struct KillswitchWrapper{F}
-    f::F
-    odes::Vector{Int}
-end
-
-function (kw::KillswitchWrapper{F})(du, u, ein, p, t) where {F}
-    kw.f(du, u, ein, p, t)
-    killswitch = p[end]
-    if !iszero(killswitch)
-        for i in kw.odes
-            du[i] = 0
-        end
-    end
-    nothing
-end
-
-function add_killswitch_to_vm(vm)
-    @assert isdiag(vm.mass_matrix)
-    odes = findall(!iszero, diag(vm.mass_matrix))
-    kwf = KillswitchWrapper(vm.f, odes)
-    newp = vcat(psym(vm), :killswitch)
-
-    vm_kill = VertexModel(vm, f=kwf, psym=newp)
-    set_default!(vm_kill, :killswitch, 0)
-
-    vm_kill
-end
-
-function get_MATPOWER_LineRatings_MVA()
-    mp_branch_df = CSV.read(joinpath(DATA_DIR, "mp_branch.csv"), DataFrame)
-    mp_branch_df.rateA
-end
-
-function get_MATPOWER_LineRatings_pu(BASE_MVA = 100.0)
-    mp_branch_df = CSV.read(joinpath(DATA_DIR, "mp_branch.csv"), DataFrame)
-    mp_branch_df.rateA ./ BASE_MVA
-end
-
-# NOTE: This builder creates the nominal IEEE39 network used for the classic power flow workflow.
-# For the dataset generation workflow in scripts/generate_dataset.jl, the package may instead use
-# get_IEEE39_base_ds(), which enables the distributed slack/load variation path used by
-# vary_load_and_run_short_circuits and generate_powerflow_variation_loads.
-function get_IEEE39_base(; add_killswitch=false)
+function get_IEEE39_base_ds(; add_killswitch=false)
 
 
     branch_df = CSV.read(joinpath(DATA_DIR, "branch.csv"), DataFrame)
@@ -127,7 +75,6 @@ function get_IEEE39_base(; add_killswitch=false)
     set_default!(unctrld_machine_load_bus_template, r"S_b$", BASE_MVA)
     set_default!(unctrld_machine_load_bus_template, r"ω_b$", 2π*BASE_FREQ)
 
-
     busses = []
     for row in eachrow(bus_df)
         i = row.bus
@@ -146,6 +93,7 @@ function get_IEEE39_base(; add_killswitch=false)
         end
 
         ## Apply component parameters from CSV files
+        #println(i)
         row.has_load && apply_csv_params!(bus, load_df, i)
         row.has_gen && apply_csv_params!(bus, machine_df, i)
         row.has_avr && apply_csv_params!(bus, avr_df, i)
@@ -155,9 +103,16 @@ function get_IEEE39_base(; add_killswitch=false)
         pf_model = if row.bus_type == "PQ"
             pfPQ(P=row.P, Q=row.Q)  ## Load bus: fixed P and Q
         elseif row.bus_type == "PV"
-            pfPV(P=row.P, V=row.V)  ## Generator bus: fixed P and V
+            # pfPV(P=row.P, V=row.V)  ## Generator bus: fixed P and V
+            if i == 39
+                dist_slack_follow_load_current_source(; P=row.P, V=row.V, idx=i)
+                # pfPV(P=row.P, V=row.V)
+            else
+                dist_slack_follow_current_source(; P=row.P, V=row.V, idx=i)
+            end
         elseif row.bus_type == "Slack"
-            pfSlack(V=row.V, δ=0)   ## Slack bus: fixed V and angle
+            dist_slack_lead_current_source(; P=row.P, V=row.V, δ=0, idx=i)
+            # pfSlack(V=row.V, δ=0)   ## Slack bus: fixed V and angle
         end
         set_pfmodel!(bus, pf_model)
 
@@ -189,52 +144,79 @@ function get_IEEE39_base(; add_killswitch=false)
 end
 
 
-
-function set_IEEE39_PF_init(nw)
-
-    # This initialization prepares the network state for a power flow solution.
-    # In the newer dataset workflow, bus 31 and 39 retain their original P/Q setpoints so
-    # that later overrides from generate_powerflow_variation_loads can be applied consistently.
-    
-    for bus_idx in 1:39
-        if :ZIPLoad₊Vset ∉ nw[VIndex(bus_idx)].psym
-            continue
-        end
-
-        vi = VIndex(bus_idx) 
-        
-        # To access parts of network objects we need special indices that distinguish edges/lines and vertices/buses
-
-        set_default!(nw[vi], :ZIPLoad₊Vset, 1.)
-
-
-        # Bus 31 and 39 contain a load and a generator. 
-        # We keep the power and reactive power set points intact, 
-        # variations in the powerflow are assigned to the generator during initialization.
-
-        if bus_idx in [31,39]
-            println(get_default(nw[vi], :ZIPLoad₊Pset))
-            println(get_default(nw[vi], :ZIPLoad₊Qset))
-            continue
-        end
-
-        # For all other loads we unset the defaults,
-        # P and Q are then determined during initialization
-        # from the provided power flow solution
-
-        P = get_default(nw[vi], :ZIPLoad₊Pset)
-        Q = get_default(nw[vi], :ZIPLoad₊Qset)
-        delete_default!(nw[vi], :ZIPLoad₊Pset)
-        delete_default!(nw[vi], :ZIPLoad₊Qset)
-        set_guess!(nw[vi], :ZIPLoad₊Pset, P)
-        set_guess!(nw[vi], :ZIPLoad₊Qset, Q)
+@mtkmodel DistributedSlackLead begin
+    @components begin
+        terminal = Terminal()
     end
-
-    for ei in 1:ne(nw)
-        eidx = EIndex(ei)
-        f = copy_pf_parameters(nw[eidx])
-        add_pfinitformula!(nw[eidx], f)
+    @parameters begin
+        Pbase, [description="Base Power [pu]"]
+        V, [description="Voltage Magnitude [pu]"]
+        δ, [description="Voltage Angle [rad]"]
     end
-    nw
+    @variables begin
+        P(t), [description="Active Power [pu]"]
+        γ(t), [description="Deviation factor from base power"]
+    end
+    @equations begin
+        P ~ terminal.u_r*terminal.i_r + terminal.u_i*terminal.i_i
+        PowerDynamics.Library.@no_simplify P ~ Pbase + (1-γ)*abs(Pbase) # equation for gamma
+        V^2 ~ terminal.u_r^2 + terminal.u_i^2 + implicit_output(terminal.i_r)
+        δ ~ atan(terminal.u_i, terminal.u_r)  + implicit_output(terminal.i_i)
+    end
+end
+function dist_slack_lead_current_source(; P=1, V=1, δ=0, idx)
+    lead = DistributedSlackLead(Pbase=P, V=V, δ=δ; name=:slack_lead)
+    # load = ZIPLoad(;name=:ZIPLoad)
+    # load = Library.PQConstraint(; P, Q)
+
+    mtkbus = MTKBus(lead)
+    bus = compile_bus(mtkbus; vidx=idx, current_source=false, assume_io_coupling=false)
+    set_default!(bus, r"γ$", 1)
+
+    bus
 end
 
+@mtkmodel DistributedSlackFollow begin
+    @components begin
+        terminal = Terminal()
+    end
+    @parameters begin
+        Pbase, [description="Base Power [pu]"]
+        V, [description="Voltage Magnitude [pu]"]
+    end
+    @variables begin
+        P(t), [description="Active Power [pu]"]
+        γ(t), [description="Deviation factor from base power",guess=1]
+    end
+    @equations begin
+        P ~ Pbase + (1-γ)*abs(Pbase)
+        P ~ terminal.u_r*terminal.i_r + terminal.u_i*terminal.i_i
+        V^2 ~ terminal.u_r^2 + terminal.u_i^2
+    end
+end
+function dist_slack_follow_current_source(; P=1, V=1, idx)
+    follow = DistributedSlackFollow(Pbase=P, V=V; name=:slack_follow)
+    mtkbus = MTKBus(follow)
+    bus = compile_bus(
+        mtkbus;
+        vidx=idx,
+        current_source=false,
+        extin=[:slack_follow₊γ => VIndex(:31, :slack_lead₊γ)],
+        assume_io_coupling=true,
+    )
+    bus
+end
+
+function dist_slack_follow_load_current_source(; P=1, V=1, idx)
+    follow = DistributedSlackFollow(Pbase=P, V=V; name=:slack_follow)
+
+    mtkbus = MTKBus(follow)
+    bus = compile_bus(
+        mtkbus;
+        vidx=idx,
+        current_source=false,
+        extin=[:slack_follow₊γ => VIndex(:31, :slack_lead₊γ)],
+        assume_io_coupling=true,
+    )
+    bus
+end

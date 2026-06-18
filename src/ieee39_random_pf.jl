@@ -29,12 +29,9 @@ function generate_powerflow_variation(nw_IEEE39_with_PF, pfnw, pfs0; pert=.1)
     P_39 = (1. + pert .* randn()) * P_39 # Vary the power of the load at bus 39
     
     pfs.v[39].p["P"] += P_39 # And add the varied load power back to the PV node parameters.
-    println(pfs.v[:].p["Q"])
-    println(pfs.v[:].p["P"])
 
     pfs = solve_powerflow(nw; pfnw, pfs0=pfs, verbose=false)
-    println("after powerflow")
-
+    
     # Provide the overrides for the varied power and reactive power of the loads at bus 31 and 39 
     internal_variations = Dict(
         VIndex(31, :ZIPLoad₊Pset) => P_31,
