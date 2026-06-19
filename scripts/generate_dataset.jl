@@ -132,6 +132,15 @@ function vary_load_and_run_short_circuits(nw, pfnw, pfs0; debug=false, verbose=f
 
     edges = collect(1:46)
     e_fail = Int[]
+    thresh = rand()
+    if 0.4 < thresh < 0.8
+        global e_fail = sample(edges, 1, replace=false)
+        pfs.e[e_fail[1]].p["active"] = 0.
+    elseif thresh >= 0.8
+        global e_fail = sample(edges, 2, replace=false)
+        pfs.e[e_fail[1]].p["active"] = 0.
+        pfs.e[e_fail[2]].p["active"] = 0.
+    end
     sc_buses = setdiff(edges, e_fail)
     
     nws_varied, pfs_varied, (;P_31, Q_31, P_39, Q_39) = try

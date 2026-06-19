@@ -213,8 +213,8 @@ function set_IEEE39_PF_init(nw)
         # variations in the powerflow are assigned to the generator during initialization.
 
         if bus_idx in [31,39]
-            println(get_default(nw[vi], :ZIPLoad₊Pset))
-            println(get_default(nw[vi], :ZIPLoad₊Qset))
+            # println(get_default(nw[vi], :ZIPLoad₊Pset))
+            # println(get_default(nw[vi], :ZIPLoad₊Qset))
             continue
         end
 

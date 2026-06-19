@@ -26,6 +26,7 @@ end
 
 ##
 nw_base = get_IEEE39_base(;add_killswitch=true)
+nw_base = get_IEEE39_base_ds(;add_killswitch=true)
 nw_39 = set_IEEE39_PF_init(nw_base)
 pfnw_39 = powerflow_model(nw_39)
 pfs0_39 = NWState(pfnw_39)
