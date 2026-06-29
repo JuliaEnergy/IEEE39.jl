@@ -1,13 +1,15 @@
 name = "IEEE39"
 uuid = "0bc2bb3a-3d46-4385-8133-edeb469ca480"
-authors = ["Frank Hellmann <hellmann@pik-potsdam.com>"]
 version = "0.1.0"
+authors = ["Frank Hellmann <hellmann@pik-potsdam.com>"]
 
 [deps]
 CSV = "336ed68f-0bac-5ca0-87d4-7b16caf5d00b"
 DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
 DiffEqCallbacks = "459566f4-90b8-5000-8ac3-15dfb0a30def"
+ForwardDiff = "f6369f11-7733-5829-9624-2563aa707210"
 Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
+JSON = "682c06a0-de6a-54ab-a142-c8b1cf79cde6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 ModelingToolkit = "961ee093-0014-501f-94e3-6117800e7a78"
 NetworkDynamics = "22e9dc34-2a0d-11e9-0de0-8588d035468b"
@@ -20,7 +22,9 @@ SciMLBase = "0bca4576-84f4-4d90-8ffe-ffa030f20462"
 CSV = "0.10.15"
 DataFrames = "1.8.0"
 DiffEqCallbacks = "4.9.0"
+ForwardDiff = "0.10, 1"
 Graphs = "1.13.1"
+JSON = "1.6.1"
 LinearAlgebra = "1.11.0"
 ModelingToolkit = "10.22.0"
 NetworkDynamics = "0.10.8"

@@ -18,8 +18,11 @@ export get_IEEE39_base, set_IEEE39_PF_init, get_MATPOWER_LineRatings_MVA, get_MA
 include("ieee39_random_pf.jl")
 export generate_powerflow_variation
 
+include("grid_of_grids.jl")
+export build_IEEE39_grid_of_grids
+
 include("utilities.jl")
-export sc_and_trip, sc_and_trip_and_kill
+export sc_and_trip, sc_and_trip_and_kill, export_nodes_json, node_nf_linearization, nf_linearization
 
 function pre()
     nw_base = get_IEEE39_base()
