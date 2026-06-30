@@ -39,6 +39,6 @@ function pre()
     pfs_init = initialize_from_pf(nw);
 end
 
-precompile(pre, ())
+@compile_workload pre()
 
 end # module IEEE39

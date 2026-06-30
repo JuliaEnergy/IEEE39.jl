@@ -145,7 +145,7 @@ function build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_
             end
         end
 
-        nw_large = Network(nw_vertices, nw_edges)
+        nw_large = Network(nw_vertices, nw_edges; warn_order=false)
 
         # --- systematic power-flow variation, cf. generate_powerflow_variation ---
         pfnw = powerflow_model(nw_large)
