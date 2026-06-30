@@ -260,6 +260,9 @@ are negated when converting to per-unit injections:
     load_P[b] = -(P_MW[b] / BASE_MVA)
     load_Q[b] = -(Q_inductive_MVAr[b] / BASE_MVA)
 
+Bus 24 is capacitive, so its reactive power injection is positive; the sign is
+flipped back after the general negation: `load_Q[24] = +Q_MVAr[24] / BASE_MVA`.
+
 These dicts can be passed directly to [`generate_powerflow_variation`](@ref) or
 [`generate_gog_powerflow_variation`](@ref).
 
@@ -295,6 +298,7 @@ function load_ieee39_scenario(row; pert=0.0, rng=Random.default_rng(), BASE_MVA=
 
     load_P = make_dict(df_P, df_P[row, :])
     load_Q = make_dict(df_Q, df_Q[row, :])
+    load_Q[24] = -load_Q[24]   # bus 24 is capacitive: positive injection
 
     load_P, load_Q
 end
