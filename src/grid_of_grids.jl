@@ -179,21 +179,21 @@ function build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_
         #    expose a "P" setpoint vs. only an initialization override).
         for sni in 0:(n_copies - 1)
             if 39 ∉ omit_per_copy[sni + 1]
-                P39 = (1 + pert * randn(rng)) * load_P39
-                Q39 = (1 + pert * randn(rng)) * load_Q39
-                pfs.v[gv(sni, 39)].p["P"] += P39
-                internal_variations[VIndex(gv(sni, 39), :ZIPLoad₊Pset)] = P39
-                internal_variations[VIndex(gv(sni, 39), :ZIPLoad₊Qset)] = Q39
+                P_39 = (1 + pert * randn(rng)) * load_P39
+                Q_39 = (1 + pert * randn(rng)) * load_Q39
+                pfs.v[gv(sni, 39)].p["P"] += P_39
+                internal_variations[VIndex(gv(sni, 39), :ZIPLoad₊Pset)] = P_39
+                internal_variations[VIndex(gv(sni, 39), :ZIPLoad₊Qset)] = Q_39
             end
-            P31 = (1 + pert * randn(rng)) * load_P31
-            Q31 = (1 + pert * randn(rng)) * load_Q31
+            P_31 = (1 + pert * randn(rng)) * load_P31
+            Q_31 = (1 + pert * randn(rng)) * load_Q31
             # Add the independently-varied load back to bus 31's net injection
             # wherever it exposes a "P" setpoint: every copy in DS mode (lead +
             # followers) and every non-central copy in standard mode (pfPV). The
             # standard-mode central slack has no "P" and is varied via the override.
-            (distributed_slack || sni != center_sni) && (pfs.v[gv(sni, 31)].p["P"] += P31)
-            internal_variations[VIndex(gv(sni, 31), :ZIPLoad₊Pset)] = P31
-            internal_variations[VIndex(gv(sni, 31), :ZIPLoad₊Qset)] = Q31
+            (distributed_slack || sni != center_sni) && (pfs.v[gv(sni, 31)].p["P"] += P_31)
+            internal_variations[VIndex(gv(sni, 31), :ZIPLoad₊Pset)] = P_31
+            internal_variations[VIndex(gv(sni, 31), :ZIPLoad₊Qset)] = Q_31
         end
 
         pfs = solve_powerflow(nw_large; pfnw, pfs0=pfs, verbose=false)

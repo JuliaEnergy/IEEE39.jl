@@ -201,7 +201,7 @@ end  # IEEE39 Base Model
                               rng=MersenneTwister(TEST_RNG_SEED))
         @test all(isfinite, uflat(nws))
         # The load component of bus 39 must match the specification
-        @test loads.P39 ≈ P39_spec
+        @test loads.P_39 ≈ P39_spec
     end
 
     @testset "Distributed slack – random perturbation" begin

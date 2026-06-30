@@ -14,7 +14,7 @@ _pfv_resolve(d, key, base, pert, rng) =
 Generate a power-flow variation of the IEEE39 network `nw` (standard or
 distributed-slack) and return `(nws, pfs, loads)`, where `nws` is the
 initialised `NWState`, `pfs` is the solved power-flow state, and `loads` is
-a named tuple `(; P31, Q31, P39, Q39)` recording the load set-points used.
+a named tuple `(; P_31, Q_31, P_39, Q_39)` recording the load set-points used.
 
 ## How the variation is applied
 
@@ -53,10 +53,10 @@ function generate_powerflow_variation(nw, pfnw, pfs0;
     Q39_base = get_default(nw, VIndex(39, :ZIPLoad₊Qset))
 
     # Resolve the final load set-points for gen+load buses
-    P31 = _pfv_resolve(load_P, 31, P31_base, pert, rng)
-    Q31 = _pfv_resolve(load_Q, 31, Q31_base, pert, rng)
-    P39 = _pfv_resolve(load_P, 39, P39_base, pert, rng)
-    Q39 = _pfv_resolve(load_Q, 39, Q39_base, pert, rng)
+    P_31 = _pfv_resolve(load_P, 31, P31_base, pert, rng)
+    Q_31 = _pfv_resolve(load_Q, 31, Q31_base, pert, rng)
+    P_39 = _pfv_resolve(load_P, 39, P39_base, pert, rng)
+    Q_39 = _pfv_resolve(load_Q, 39, Q39_base, pert, rng)
 
     # For bus 39: remove the load contribution from the net-injection "P" so
     # that the batch scale below only touches the generator side.
@@ -75,7 +75,7 @@ function generate_powerflow_variation(nw, pfnw, pfs0;
     pfs.v[:].p["Q"] .*= (1 .+ pert .* randn(rng, nq))
 
     # Add back the independently-varied bus-39 load
-    pfs.v[39].p["P"] += P39
+    pfs.v[39].p["P"] += P_39
 
     # Override any directly-specified pure PQ load buses
     pq_load_buses = [b for b in 1:n_vert
@@ -94,15 +94,15 @@ function generate_powerflow_variation(nw, pfnw, pfs0;
     pfs = solve_powerflow(nw; pfnw, pfs0=pfs, verbose=false)
 
     internal_variations = Dict(
-        VIndex(31, :ZIPLoad₊Pset) => P31,
-        VIndex(31, :ZIPLoad₊Qset) => Q31,
-        VIndex(39, :ZIPLoad₊Pset) => P39,
-        VIndex(39, :ZIPLoad₊Qset) => Q39,
+        VIndex(31, :ZIPLoad₊Pset) => P_31,
+        VIndex(31, :ZIPLoad₊Qset) => Q_31,
+        VIndex(39, :ZIPLoad₊Pset) => P_39,
+        VIndex(39, :ZIPLoad₊Qset) => Q_39,
     )
     default_overrides = merge(interface_values(pfs), internal_variations)
     nws = initialize_from_pf(nw; pfs, tol=1e-3, nwtol=1e-3,
                              default_overrides, verbose=false)
-    return nws, pfs, (; P31, Q31, P39, Q39)
+    return nws, pfs, (; P_31, Q_31, P_39, Q_39)
 end
 
 """
@@ -182,22 +182,22 @@ function generate_gog_powerflow_variation(nw_gog, pfnw, pfs0;
                 has_default(nw_gog, VIndex(gidx39, :ZIPLoad₊Pset))
             P39_base = get_default(nw_gog, VIndex(gidx39, :ZIPLoad₊Pset))
             Q39_base = get_default(nw_gog, VIndex(gidx39, :ZIPLoad₊Qset))
-            P39 = _pfv_resolve(load_P, gidx39, P39_base, pert, rng)
-            Q39 = _pfv_resolve(load_Q, gidx39, Q39_base, pert, rng)
-            pfs.v[gidx39].p["P"] += P39
-            internal_variations[VIndex(gidx39, :ZIPLoad₊Pset)] = P39
-            internal_variations[VIndex(gidx39, :ZIPLoad₊Qset)] = Q39
+            P_39 = _pfv_resolve(load_P, gidx39, P39_base, pert, rng)
+            Q_39 = _pfv_resolve(load_Q, gidx39, Q39_base, pert, rng)
+            pfs.v[gidx39].p["P"] += P_39
+            internal_variations[VIndex(gidx39, :ZIPLoad₊Pset)] = P_39
+            internal_variations[VIndex(gidx39, :ZIPLoad₊Qset)] = Q_39
         end
         # bus 31 (all copies)
         gidx31 = gv(sni, 31)
         P31_base = get_default(nw_gog, VIndex(gidx31, :ZIPLoad₊Pset))
         Q31_base = get_default(nw_gog, VIndex(gidx31, :ZIPLoad₊Qset))
-        P31 = _pfv_resolve(load_P, gidx31, P31_base, pert, rng)
-        Q31 = _pfv_resolve(load_Q, gidx31, Q31_base, pert, rng)
-        internal_variations[VIndex(gidx31, :ZIPLoad₊Pset)] = P31
-        internal_variations[VIndex(gidx31, :ZIPLoad₊Qset)] = Q31
+        P_31 = _pfv_resolve(load_P, gidx31, P31_base, pert, rng)
+        Q_31 = _pfv_resolve(load_Q, gidx31, Q31_base, pert, rng)
+        internal_variations[VIndex(gidx31, :ZIPLoad₊Pset)] = P_31
+        internal_variations[VIndex(gidx31, :ZIPLoad₊Qset)] = Q_31
         if sni != center_sni || distributed_slack
-            pfs.v[gidx31].p["P"] += P31
+            pfs.v[gidx31].p["P"] += P_31
         end
     end
 
