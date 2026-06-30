@@ -59,7 +59,7 @@ function get_MATPOWER_LineRatings_pu(BASE_MVA = 100.0)
     mp_branch_df.rateA ./ BASE_MVA
 end
 
-function get_IEEE39_base(; add_killswitch=false)
+function get_IEEE39_base(; add_killswitch=false, distributed_slack=false)
 
 
     branch_df = CSV.read(joinpath(DATA_DIR, "branch.csv"), DataFrame)
@@ -149,11 +149,19 @@ function get_IEEE39_base(; add_killswitch=false)
 
         ## Set power flow model based on bus type
         pf_model = if row.bus_type == "PQ"
-            pfPQ(P=row.P, Q=row.Q)  ## Load bus: fixed P and Q
+            pfPQ(P=row.P, Q=row.Q)
         elseif row.bus_type == "PV"
-            pfPV(P=row.P, V=row.V)  ## Generator bus: fixed P and V
+            if distributed_slack
+                dist_slack_follow_current_source(P=row.P, V=row.V, idx=i, lead_vidx=31)
+            else
+                pfPV(P=row.P, V=row.V)
+            end
         elseif row.bus_type == "Slack"
-            pfSlack(V=row.V, δ=0)   ## Slack bus: fixed V and angle
+            if distributed_slack
+                dist_slack_lead_current_source(P=row.P, V=row.V, δ=0, idx=i)
+            else
+                pfSlack(V=row.V, δ=0)
+            end
         end
         set_pfmodel!(bus, pf_model)
 
@@ -229,5 +237,65 @@ function set_IEEE39_PF_init(nw)
     end
 
     nw
+end
+
+"""
+    load_ieee39_scenario(row; pert=0.0, rng=Random.default_rng(), BASE_MVA=100.0)
+    -> (load_P::Dict{Int,Float64}, load_Q::Dict{Int,Float64})
+
+Return active and reactive power demand dictionaries for one 15-minute time step
+from the IEEE39 load scenarios published in:
+
+Tricarico, Gioacchino, et al. "A modified version of the IEEE 39-bus test system for the day-ahead market." 2023 IEEE PES Conference on Innovative Smart Grid Technologies-Middle East (ISGT Middle East). IEEE, 2023.
+https://ieeexplore.ieee.org/document/10078548
+
+`row` selects a 15-minute time step (1-indexed; the files cover 96 × 365 = 35040
+steps for the year 2014).
+
+The returned dicts map bus index → per-unit power injection (negative = load
+consuming power, 100 MVA base).  Active power columns are in MW and reactive
+power columns are labelled as *inductive* (absorbed from the network), so both
+are negated when converting to per-unit injections:
+
+    load_P[b] = -(P_MW[b] / BASE_MVA)
+    load_Q[b] = -(Q_inductive_MVAr[b] / BASE_MVA)
+
+These dicts can be passed directly to [`generate_powerflow_variation`](@ref) or
+[`generate_gog_powerflow_variation`](@ref).
+
+If `pert > 0`, each P and Q value is independently multiplied by
+`(1 + pert * randn(rng))` to add load uncertainty.
+"""
+function load_ieee39_scenario(row; pert=0.0, rng=Random.default_rng(), BASE_MVA=100.0)
+    p_file = joinpath(DATA_DIR, "Loads_P.csv")
+    q_file = joinpath(DATA_DIR, "Loads_Q.csv")
+
+    # P: semicolon-delimited; row 1 = names (first col is timestamp), row 2 = units, rows 3+ = data
+    df_P_raw = CSV.read(p_file, DataFrame; delim=';', header=1, skipto=3)
+    df_P = df_P_raw[:, 2:end]   # drop timestamp column ("Quasi-Dynamic Simulation AC")
+
+    # Q: comma-delimited; row 1 = names, row 2 = units, rows 3+ = data
+    df_Q = CSV.read(q_file, DataFrame; delim=',', header=1, skipto=3)
+
+    n = nrow(df_P)
+    1 <= row <= n || throw(ArgumentError("row must be in 1:$n, got $row"))
+
+    bus_of(col) = parse(Int, match(r"\d+", string(col)).match)
+
+    function make_dict(df, row_vals)
+        d = Dict{Int, Float64}()
+        for col in names(df)
+            b = bus_of(col)
+            v = -Float64(row_vals[col]) / BASE_MVA   # negate: file stores consumption
+            pert > 0 && (v *= 1.0 + pert * randn(rng))
+            d[b] = v
+        end
+        d
+    end
+
+    load_P = make_dict(df_P, df_P[row, :])
+    load_Q = make_dict(df_Q, df_Q[row, :])
+
+    load_P, load_Q
 end
 
