@@ -12,17 +12,24 @@ using DiffEqCallbacks
 using PrecompileTools
 using SciMLBase
 
+include("distributed_slack.jl")
+export DistributedSlackLead, DistributedSlackFollow
+export dist_slack_lead_current_source, dist_slack_follow_current_source
+
 include("ieee39_base.jl")
 export get_IEEE39_base, set_IEEE39_PF_init, get_MATPOWER_LineRatings_MVA, get_MATPOWER_LineRatings_pu
+export load_ieee39_scenario
 
 include("ieee39_random_pf.jl")
-export generate_powerflow_variation
+export generate_powerflow_variation, generate_gog_powerflow_variation
 
 include("grid_of_grids.jl")
 export build_IEEE39_grid_of_grids
 
 include("utilities.jl")
-export sc_and_trip, sc_and_trip_and_kill, export_nodes_json, node_nf_linearization, nf_linearization
+export sc_and_trip, sc_and_trip_and_kill, sc_and_clear
+export export_nodes_json, export_lines_json, import_network_from_json
+export node_nf_linearization, nf_linearization
 
 function pre()
     nw_base = get_IEEE39_base()

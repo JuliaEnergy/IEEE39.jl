@@ -6,7 +6,8 @@ using CSV
 using DataFrames
 
 """
-    build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_rng(), max_tries=20)
+    build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_rng(),
+                               max_tries=20, distributed_slack=false)
 
 Build an `N×N` lattice of IEEE39 grid copies wired together into a single large
 `Network` and return `(nw_large, nws_init)`. One-off helper for large-network
@@ -16,26 +17,33 @@ experiments.
     `0:N-1`). Each pair of right/down neighbours is joined by one extra line
     whose parameters are copied from a random existing branch, connecting two
     random buses (one in each neighbouring copy).
-  - Only the copy in the centre of the lattice keeps its slack bus (bus 31); in
-    every other copy bus 31 is turned into a PV bus, so the whole grid has a
-    single slack.
+  - Only the copy in the centre of the lattice keeps its slack/lead bus (bus 31);
+    in every other copy bus 31 is turned into a PV bus (`distributed_slack=false`,
+    default) or a distributed-slack follower (`distributed_slack=true`), so the
+    whole grid has a single reference point.
+  - With `distributed_slack=true` the slack duty is shared across all bus-31
+    instances via a global balance variable `γ`: the lead (centre copy) fixes
+    voltage magnitude and angle and broadcasts `γ`; each follower adjusts its net
+    injection as `P = Pbase + (1-γ)·|Pbase|`.
   - Each non-slack generator bus (30, 32–39) in each copy is independently
     dropped with probability `p_omit`: machine-only buses become junction
     (Kirchhoff) buses, the machine+load bus (39) becomes a load bus. To keep each
-    copy roughly self-balanced (so the lone central slack and the tie lines are
-    not overloaded), the copy's PQ loads are scaled down by the dropped
+    copy roughly self-balanced, the copy's PQ loads are scaled down by the dropped
     generation.
-  - The power flow is then varied systematically following
-    [`generate_powerflow_variation`](@ref): every generator power and every load
-    power is scaled by `(1 + pert·randn())`. At the generator+load buses (39, and
-    31 where it is PV) the generator and load powers are varied independently; at
-    the central slack only its load is varied.
+  - The power flow is then varied systematically, following the
+    `ieee39_random_pf.jl` semantics: every generator power and every load power is
+    scaled by `(1 + pert·randn())`. At the generator+load buses (39, and 31
+    wherever it exposes a `"P"` setpoint — PV in standard mode, or lead/follower in
+    distributed-slack mode) the generator and load powers are varied independently.
+    Only the standard-mode central slack has no `"P"` setpoint; there just its load
+    is varied (the slack absorbs the global imbalance).
 
 Because the random draws occasionally produce a power flow that does not
 converge, the whole construction is retried with fresh draws (advancing `rng`)
 up to `max_tries` times.
 """
-function build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_rng(), max_tries=20)
+function build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_rng(),
+                                    max_tries=20, distributed_slack=false)
     nw_39 = set_IEEE39_PF_init(get_IEEE39_base())
     n_vert = nv(nw_39)
     n_copies = N * N
@@ -102,9 +110,19 @@ function build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_
                     push!(nw_vertices, rep)
                 else
                     vmc = VertexModel(copy(vm); vidx=gvidx, name=subname(sni, vm.name))
-                    # only the centre copy keeps its slack; elsewhere bus 31 -> PV
-                    if b == 31 && sni != center_sni
-                        set_pfmodel!(vmc, pfPV(P=P31_pv, V=V31))
+                    if b == 31
+                        lead_vidx = gv(center_sni, 31)
+                        if distributed_slack
+                            if sni == center_sni
+                                set_pfmodel!(vmc, dist_slack_lead_current_source(
+                                    P=P31_pv, V=V31, δ=0, idx=gvidx))
+                            else
+                                set_pfmodel!(vmc, dist_slack_follow_current_source(
+                                    P=P31_pv, V=V31, idx=gvidx, lead_vidx=lead_vidx))
+                            end
+                        elseif sni != center_sni
+                            set_pfmodel!(vmc, pfPV(P=P31_pv, V=V31))
+                        end
                     end
                     push!(nw_vertices, vmc)
                 end
@@ -134,11 +152,15 @@ function build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_
         pfs = NWState(pfnw)
         internal_variations = Dict()
 
-        # 1. At the generator+load PV buses, remove the load from the net injection
-        #    so that the global scaling below varies the generator power alone.
+        # 1. At the generator+load buses remove the load from the net injection so
+        #    that the global scaling below varies the generator power alone. Per the
+        #    `ieee39_random_pf.jl` semantics, bus 31 exposes its `Pbase` as `"P"` in
+        #    distributed-slack mode too (lead at the centre, follower elsewhere), so
+        #    its load is subtracted and re-added just like a pfPV bus. The only bus
+        #    without a `"P"` setpoint is the standard-mode central slack.
         for sni in 0:(n_copies - 1)
             39 ∉ omit_per_copy[sni + 1] && (pfs.v[gv(sni, 39)].p["P"] -= load_P39)
-            sni != center_sni && (pfs.v[gv(sni, 31)].p["P"] -= load_P31)
+            (distributed_slack || sni != center_sni) && (pfs.v[gv(sni, 31)].p["P"] -= load_P31)
         end
         # 2. Shed each copy's PQ loads to compensate the generation it dropped.
         for sni in 0:(n_copies - 1)
@@ -153,8 +175,8 @@ function build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_
         pfs.v[:].p["P"] .*= (1 .+ pert .* randn(rng, length(pfs.v[:].p["P"])))
         pfs.v[:].p["Q"] .*= (1 .+ pert .* randn(rng, length(pfs.v[:].p["Q"])))
         # 4. Vary the loads of the generator+load buses independently and add them
-        #    back to the net injection; at the central slack the load is varied via
-        #    an initialization override only (it has no power-flow setpoint).
+        #    back to the net injection (see the per-bus note below for which buses
+        #    expose a "P" setpoint vs. only an initialization override).
         for sni in 0:(n_copies - 1)
             if 39 ∉ omit_per_copy[sni + 1]
                 P39 = (1 + pert * randn(rng)) * load_P39
@@ -165,7 +187,11 @@ function build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_
             end
             P31 = (1 + pert * randn(rng)) * load_P31
             Q31 = (1 + pert * randn(rng)) * load_Q31
-            sni != center_sni && (pfs.v[gv(sni, 31)].p["P"] += P31)
+            # Add the independently-varied load back to bus 31's net injection
+            # wherever it exposes a "P" setpoint: every copy in DS mode (lead +
+            # followers) and every non-central copy in standard mode (pfPV). The
+            # standard-mode central slack has no "P" and is varied via the override.
+            (distributed_slack || sni != center_sni) && (pfs.v[gv(sni, 31)].p["P"] += P31)
             internal_variations[VIndex(gv(sni, 31), :ZIPLoad₊Pset)] = P31
             internal_variations[VIndex(gv(sni, 31), :ZIPLoad₊Qset)] = Q31
         end
@@ -179,8 +205,16 @@ function build_IEEE39_grid_of_grids(N; pert=0.1, p_omit=0.2, rng=Random.default_
     for attempt_i in 1:max_tries
         try
             return attempt()
-        catch
+        catch err
+            # Only a bad random draw (non-converging power flow / failed
+            # initialization) is worth retrying with fresh draws. Never mask a
+            # user interrupt or a genuine programming error behind the retry loop —
+            # rethrow those immediately so they surface instead of being retried
+            # `max_tries` times.
+            err isa Union{InterruptException, MethodError,
+                          UndefVarError, TypeError} && rethrow()
             attempt_i == max_tries && rethrow()
         end
     end
+    error("build_IEEE39_grid_of_grids: power flow did not converge after $max_tries attempts")
 end
